@@ -83,9 +83,11 @@ lower cost per unit and fewer buffer violations, with the fuel penalty exposed.
 
 ### Command view
 
-The map-first operating screen shows the offline satellite/hillshade basemap of
-the Ladakh network, corridor state, planned convoys, the 7-day allocation plan,
-FOB stock against safety buffers, closure timings and the simulated impact cards.
+The map-first operating screen shows the Ladakh network over a locally-vendored
+satellite basemap (Esri World Imagery with SRTM hillshade), corridor state,
+planned convoy routes with animated convoys in transit, the 7-day allocation
+plan, FOB stock against safety buffers, closure timings and the simulated
+impact cards.
 
 ![Command view](docs/command-view.png)
 
@@ -139,6 +141,9 @@ docker compose down -v && docker compose up -d
 ```
 
 No API keys, external data services or tile servers are required at runtime.
+The satellite basemap is vendored into `frontend/public/satellite/` (imagery
+© Esri, Maxar, Earthstar Geographics; terrain from Mapzen/AWS terrain tiles)
+and can be regenerated offline with `python3 tools/build_basemap.py`.
 
 ---
 
@@ -314,9 +319,11 @@ Interactive schemas: `http://localhost:8000/docs`.
 │   │   ├── views/EdgeClient.jsx
 │   │   ├── components/TacticalMap.jsx
 │   │   └── edge/ledger.js
+│   ├── public/satellite/   vendored basemap imagery + hillshade
 │   ├── nginx.conf
 │   ├── vite.config.js
 │   └── Dockerfile
+├── tools/build_basemap.py  rebuilds the offline satellite basemap assets
 ├── docs/                  screenshots, report, idea template, demo video
 ├── docker-compose.yml
 └── README.md

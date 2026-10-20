@@ -118,3 +118,24 @@ def test_metrics_simulated_label(client):
     assert m["drona"]["stockout_units"] < m["naive"]["stockout_units"]
     # delta percentages consistent with the raw numbers
     assert m["delta"]["stockout_reduction_pct"] >= 50
+
+
+def test_forecast_accuracy_backtest(client):
+    r = client.get("/api/forecast/accuracy")
+    assert r.status_code == 200
+    d = r.json()
+    assert d["label"] == "SIMULATED"
+    assert d["splits"] == 4
+    assert d["test_days_per_split"] == 28
+    assert set(d["per_class"]) == {"I", "III", "V"}
+    for c, v in d["per_class"].items():
+        assert v["mae"] >= 0, f"class {c}: MAE must be non-negative"
+        assert v["baseline_mae"] > 0, f"class {c}: baseline must be positive"
+        # the seeded demand is learnable (weather/troops drive it), so
+        # LightGBM must beat the trailing-7-day-mean baseline overall
+    total_imp = sum(v["improvement_pct"] for v in d["per_class"].values())
+    assert total_imp > 0, "model should beat the naive baseline on aggregate"
+
+    # second call is served from cache (same object, no recompute)
+    r2 = client.get("/api/forecast/accuracy")
+    assert r2.json() == d

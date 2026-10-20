@@ -6,6 +6,7 @@ seeded 12-month daily history, predicting daily consumption per FOB.
 import datetime as dt
 import os
 import pickle
+from collections import defaultdict, deque
 
 import lightgbm as lgb
 import numpy as np
@@ -106,3 +107,98 @@ def forecast_payload(conn, models, start_date, days, model_dir=None):
         payload["fobs"][fob] = {"name": node["name"], "troops": node["troops"],
                                 "forecast": per_class}
     return payload
+
+
+def walk_forward_backtest(conn, n_splits=4, test_days=28):
+    """Walk-forward evaluation: for each split, train on all data strictly
+    before the test window and predict the next `test_days` days.
+
+    MAE is pooled across FOB-days and splits per class. The baseline is a
+    trailing 7-day mean per (FOB, class) — the "look at last week" policy a
+    staff officer would use without a model. Positive improvement_pct means
+    LightGBM beats that naive baseline.
+    """
+    dates = [r["date"] for r in
+             conn.execute("SELECT DISTINCT date FROM history ORDER BY date")]
+    n = len(dates)
+    if n <= n_splits * test_days:
+        raise ValueError(f"history too short: {n} days for "
+                         f"{n_splits}x{test_days}-day walk-forward")
+
+    abs_err = {c: [] for c in config.CLASSES}
+    base_err = {c: [] for c in config.CLASSES}
+    for split in range(n_splits):
+        # oldest split first: train on everything before the window
+        start_idx = n - (n_splits - split) * test_days
+        train_end = dates[start_idx - 1]
+        test_window = set(dates[start_idx:start_idx + test_days])
+
+        train_rows = conn.execute(
+            "SELECT date, qty, temp_c, snowfall_cm, troops, class_id FROM history "
+            "WHERE date <= ?", (train_end,)).fetchall()
+        by_class = defaultdict(list)
+        for r in train_rows:
+            by_class[r["class_id"]].append(r)
+
+        # trailing 7-day mean per (fob, class) up to (not incl.) each test day
+        tail = defaultdict(deque)
+        tail_rows = conn.execute(
+            "SELECT date, fob_id, class_id, qty FROM history "
+            "WHERE date <= ? ORDER BY date", (train_end,)).fetchall()
+        for r in tail_rows:
+            tail[(r["fob_id"], r["class_id"])].append(r["qty"])
+            if len(tail[(r["fob_id"], r["class_id"])]) > 7:
+                tail[(r["fob_id"], r["class_id"])].popleft()
+
+        test_rows = conn.execute(
+            "SELECT date, fob_id, class_id, qty, temp_c, snowfall_cm, troops "
+            "FROM history WHERE date > ? AND date <= ? ORDER BY date",
+            (train_end, dates[start_idx + test_days - 1])).fetchall()
+
+        for class_id in config.CLASSES:
+            rows = by_class[class_id]
+            X, y = _rows_to_xy(rows)
+            m = lgb.LGBMRegressor(**PARAMS)
+            m.fit(X, y)
+            cr = [r for r in test_rows if r["class_id"] == class_id
+                  and r["date"] in test_window]
+            if not cr:
+                continue
+            X_test = np.array([[r["temp_c"], r["snowfall_cm"], r["troops"],
+                                dt.date.fromisoformat(r["date"]).weekday()]
+                               for r in cr], dtype=float)
+            preds = m.predict(X_test)
+            for r, p in zip(cr, preds):
+                abs_err[class_id].append(abs(float(p) - r["qty"]))
+                # baseline rolls forward: score against the trailing 7-day
+                # mean, then fold the actual into the window so day k+1 of
+                # the test window sees day k's observation (a staff officer
+                # updating yesterday's estimate, not a frozen one).
+                t = tail[(r["fob_id"], class_id)]
+                mean7 = sum(t) / len(t) if t else r["qty"]
+                base_err[class_id].append(abs(mean7 - r["qty"]))
+                t.append(r["qty"])
+                if len(t) > 7:
+                    t.popleft()
+
+    per_class = {}
+    for class_id in config.CLASSES:
+        if not abs_err[class_id]:
+            continue
+        mae = float(np.mean(abs_err[class_id]))
+        baseline = float(np.mean(base_err[class_id]))
+        per_class[class_id] = {
+            "mae": round(mae, 4),
+            "baseline_mae": round(baseline, 4),
+            "improvement_pct": round((baseline - mae) / baseline * 100, 1)
+                               if baseline > 0 else 0.0,
+        }
+    return {
+        "label": "SIMULATED",
+        "method": "walk-forward: train on data strictly before each test window; "
+                  "pooled MAE over FOB-days; baseline = rolling trailing 7-day mean "
+                  "(updated with each observed day)",
+        "splits": n_splits,
+        "test_days_per_split": test_days,
+        "per_class": per_class,
+    }

@@ -22,3 +22,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 .openchamber/
+
+# local port override (8080 is taken by another project on this machine)
+docker-compose.override.yml

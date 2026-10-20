@@ -37,5 +37,6 @@ def client(db_path, monkeypatch):
     from app import main
     main._state["models"] = None
     main._state["metrics"] = None
+    main._state["accuracy"] = None
     with TestClient(main.app) as c:
         yield c
