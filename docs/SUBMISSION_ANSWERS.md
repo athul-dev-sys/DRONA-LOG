@@ -79,7 +79,7 @@ The genesis previous hash is 64 zeros. The browser uses WebCrypto and the server
 
 OPERATOR EXPERIENCE
 
-The prototype has two operator views plus API documentation. The command view is a dark tactical map of the synthetic theatre with the open corridor, alternate corridor, FOBs, depots, passes and planned convoys, alongside a 7-day allocation table, FOB stock versus buffer, closure controls, live timings and a 30-day impact panel. The edge client records requisitions, shows the local hash chain, reports backend online/offline state, syncs pending entries and exposes tamper simulation. FastAPI publishes OpenAPI documentation at /docs. Every operational screen is labelled SIMULATED. The interface is desktop-first and designed for a single dense planning surface rather than a sequence of wizards.
+The prototype has two operator views plus API documentation. The command view is a light Indian Army field-dossier interface over an offline satellite/hillshade map of the synthetic theatre, with the open corridor, alternate corridor, FOBs, depots, passes and planned convoys, alongside a 7-day allocation table, FOB stock versus buffer, closure controls, live timings and a 30-day impact panel. The edge client records requisitions, shows the local hash chain, reports backend online/offline state, syncs pending entries and exposes tamper simulation. FastAPI publishes OpenAPI documentation at /docs. Every operational screen is labelled SIMULATED. The interface is desktop-first and designed for a single dense planning surface rather than a sequence of wizards.
 
 MEASURED RESULTS
 
@@ -149,7 +149,7 @@ Primary bucket: **Software**. The solution is an AI/ML, optimisation, geospatial
 docs/Subterra_Mesh_SIH26251_Idea_Template.pdf
 ```
 
-- 6 pages, A4 landscape, exported from the final editable PPTX.
+- 6 pages, 16:9 landscape, exported from the final editable PPTX.
 - 1.26 MB, below the 10 MB portal limit.
 - Team ID 185972 is present on the deck.
 - Companion editable file: `submission/final/Subterra_Mesh_SIH26251.pptx`.

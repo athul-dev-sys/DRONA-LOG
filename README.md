@@ -83,9 +83,9 @@ lower cost per unit and fewer buffer violations, with the fuel penalty exposed.
 
 ### Command view
 
-The map-first operating screen shows the Ladakh network, corridor state, planned
-convoys, the 7-day allocation plan, FOB stock against safety buffers, closure
-timings and the simulated impact cards.
+The map-first operating screen shows the offline satellite/hillshade basemap of
+the Ladakh network, corridor state, planned convoys, the 7-day allocation plan,
+FOB stock against safety buffers, closure timings and the simulated impact cards.
 
 ![Command view](docs/command-view.png)
 
@@ -105,8 +105,13 @@ and rejects a hand-edited entry.
 ![Tamper-evident edge ledger](docs/edge-tamper.png)
 
 The app has two operator views (`/` and `/edge`) plus interactive FastAPI
-documentation at `/docs`. Map tiles and assets are local, so the demo does not
-depend on a CDN or tile server.
+documentation at `/docs`. Both use a light Indian Army field-dossier palette:
+olive header with a tricolour stripe, parchment panels and brass accents.
+
+The map is a locally vendored Esri/Maxar satellite mosaic with a Mapzen/AWS SRTM
+hillshade overlay for the Ladakh area of operations. The imagery is added after
+the operational layers load, so a slow image fetch cannot block the map, and
+there are no tile requests at runtime.
 
 ---
 
@@ -157,7 +162,7 @@ flowchart LR
     end
 
     subgraph Client["Command client"]
-        MAP["MapLibre GL\nlocal tactical style"]
+        MAP["MapLibre GL\noffline satellite basemap"]
         VIEW["React command view"]
         MAP --> VIEW
     end
