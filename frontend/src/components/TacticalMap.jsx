@@ -11,12 +11,12 @@ const STYLE = {
     grid: { type: 'geojson', data: gridGeo() },
   },
   layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0a0f14' } },
+    { id: 'bg', type: 'background', paint: { 'background-color': '#D6CCB4' } },
     {
       id: 'grid',
       type: 'line',
       source: 'grid',
-      paint: { 'line-color': '#101820', 'line-width': 1, 'line-opacity': 0.4 },
+      paint: { 'line-color': '#E8DFC9', 'line-width': 1, 'line-opacity': 0.22 },
     },
   ],
 }
@@ -85,12 +85,12 @@ function gridGeo() {
 }
 
 const NODE_STYLE = {
-  gateway: { color: '#8b95a5', size: 6, label: 'GATEWAY' },
-  depot: { color: '#4ade80', size: 10, label: 'BASE DEPOT' },
-  staging: { color: '#22d3ee', size: 8, label: 'STAGING' },
-  fob: { color: '#fbbf24', size: 9, label: 'FOB' },
-  pass: { color: '#94a3b8', size: 6, label: 'PASS' },
-  transit: { color: '#3d4a5c', size: 4, label: '' },
+  gateway: { color: '#8C7440', size: 6, label: 'GATEWAY' },
+  depot: { color: '#3F6B3F', size: 10, label: 'BASE DEPOT' },
+  staging: { color: '#2F6F77', size: 8, label: 'STAGING' },
+  fob: { color: '#C08A2E', size: 9, label: 'FOB' },
+  pass: { color: '#EFE7D6', size: 6, label: 'PASS' },
+  transit: { color: '#B9AD94', size: 4, label: '' },
 }
 
 const WEST_PASSES = new Set(['ZOJILA', 'NAMIKALA', 'FOTULA'])
@@ -152,7 +152,7 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
         id: 'edges-line',
         type: 'line',
         source: 'edges',
-        paint: { 'line-color': '#1d2a38', 'line-width': 1.5 },
+        paint: { 'line-color': '#F1E7D0', 'line-width': 1.5, 'line-opacity': 0.4 },
       })
 
       // gateway corridor routes (west/south) - coloured by open/closed
@@ -169,8 +169,8 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
         type: 'line',
         source: 'gw',
         paint: {
-          'line-color': ['case', ['==', ['get', 'closed'], 1], '#ef4444',
-            ['match', ['get', 'which'], 'west', '#4ade80', '#22d3ee']],
+          'line-color': ['case', ['==', ['get', 'closed'], 1], '#C0392B',
+            ['match', ['get', 'which'], 'west', '#2F7D3A', '#2F6F77']],
           'line-width': ['case', ['==', ['get', 'closed'], 1], 3, 2.5],
           'line-opacity': 0.9,
         },
@@ -188,9 +188,9 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
         type: 'circle',
         source: 'passes',
         paint: {
-          'circle-color': ['case', ['==', ['get', 'closed'], 1], '#ef4444', '#64748b'],
+          'circle-color': ['case', ['==', ['get', 'closed'], 1], '#C0392B', '#EFE7D6'],
           'circle-radius': 5,
-          'circle-stroke-color': '#0a0f14',
+          'circle-stroke-color': '#3B4A2F',
           'circle-stroke-width': 1,
         },
       })
@@ -209,9 +209,9 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
         type: 'circle',
         source: 'nodes',
         paint: {
-          'circle-color': ['match', ['get', 'kind'], 'depot', '#4ade80', 'staging', '#22d3ee', 'fob', '#fbbf24', '#8b95a5'],
+          'circle-color': ['match', ['get', 'kind'], 'depot', '#3F6B3F', 'staging', '#2F6F77', 'fob', '#C08A2E', '#8C7440'],
           'circle-radius': ['match', ['get', 'kind'], 'depot', 9, 'staging', 7, 'fob', 7.5, 5],
-          'circle-stroke-color': '#0a0f14',
+          'circle-stroke-color': '#F7F3E8',
           'circle-stroke-width': 1.5,
         },
       })
@@ -305,7 +305,7 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
           id: 'plan-line',
           type: 'line',
           source: 'plan-routes',
-          paint: { 'line-color': '#f59e0b', 'line-width': 2, 'line-dasharray': [2, 1.5] },
+          paint: { 'line-color': '#E8892B', 'line-width': 2.5, 'line-dasharray': [2, 1.5] },
         })
       } else {
         map.getSource('plan-routes').setData({ type: 'FeatureCollection', features: feats })

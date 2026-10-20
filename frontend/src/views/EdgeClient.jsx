@@ -119,78 +119,78 @@ export default function EdgeClient() {
     store.transaction.oncomplete = () => { setSyncResult(null); refresh() }
   }
 
-  const statusColor = backendUp === null ? 'text-slate-400' : backendUp ? 'text-emerald-400' : 'text-rose-400'
+  const statusColor = backendUp === null ? 'text-[#C9C0A8]' : backendUp ? 'text-[#CDE3B8]' : 'text-[#F2B8AE]'
   const statusText = backendUp === null ? 'PROBING' : backendUp ? 'BACKEND ONLINE' : (online ? 'BACKEND OFFLINE' : 'OFFLINE')
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center justify-between border-b border-[#1b2735] bg-[#0c1219] px-4 py-2">
+      <header className="app-header flex items-center justify-between bg-[#3B4A2F] px-4 pb-3 pt-2">
         <div>
-          <div className="text-sm font-semibold tracking-widest text-slate-200">DRONA-LOG · EDGE CLIENT</div>
-          <div className="text-[10px] uppercase tracking-widest text-slate-500">offline requisitions · hash-chained ledger · {device_id}</div>
+          <div className="text-sm font-semibold tracking-widest text-[#F7F3E7]">DRONA-LOG · EDGE CLIENT</div>
+          <div className="text-[10px] uppercase tracking-widest text-[#C9C0A8]">offline requisitions · hash-chained ledger · {device_id}</div>
         </div>
         <div className="flex items-center gap-4 text-[11px]">
           <span className={statusColor}>
-            <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${backendUp ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+            <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${backendUp ? 'bg-[#7FB36A]' : 'bg-[#D98A7B]'}`} />
             {statusText}
           </span>
-          <Link to="/" className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-[#16202c]">← COMMAND VIEW</Link>
+          <Link to="/" className="rounded border border-[#8E9A7A] px-2 py-0.5 text-[#F7F3E7] hover:bg-[#4A5A3C]">← COMMAND VIEW</Link>
         </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
         {/* left: entry form + ledger */}
         <div className="flex min-w-0 flex-1 flex-col p-4">
-          <form onSubmit={submit} className="mb-4 grid grid-cols-6 items-end gap-2 rounded border border-[#1d2836] bg-[#0d141c] p-3">
+          <form onSubmit={submit} className="mb-4 grid grid-cols-6 items-end gap-2 rounded border border-[#D5CCB8] bg-[#FCFAF3] p-3">
             <label className="col-span-2">
-              <div className="text-[10px] uppercase text-slate-500">FOB</div>
+              <div className="text-[10px] uppercase text-[#777B68]">FOB</div>
               <select value={form.fob_id} onChange={(e) => setForm({ ...form, fob_id: e.target.value })}
-                className="mt-1 w-full rounded border border-[#28364a] bg-[#0a0f14] px-2 py-1 text-[12px] text-slate-200">
+                className="mt-1 w-full rounded border border-[#C9BFA8] bg-[#FFFDF7] px-2 py-1 text-[12px] text-[#2F3528]">
                 {fobs.map((f) => <option key={f}>{f}</option>)}
               </select>
             </label>
             <label className="col-span-2">
-              <div className="text-[10px] uppercase text-slate-500">Supply class</div>
+              <div className="text-[10px] uppercase text-[#777B68]">Supply class</div>
               <select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })}
-                className="mt-1 w-full rounded border border-[#28364a] bg-[#0a0f14] px-2 py-1 text-[12px] text-slate-200">
+                className="mt-1 w-full rounded border border-[#C9BFA8] bg-[#FFFDF7] px-2 py-1 text-[12px] text-[#2F3528]">
                 {CLASSES.map((c) => <option key={c} value={c}>{CLASS_NAMES[c]}</option>)}
               </select>
             </label>
             <label>
-              <div className="text-[10px] uppercase text-slate-500">Qty</div>
+              <div className="text-[10px] uppercase text-[#777B68]">Qty</div>
               <input type="number" step="0.1" min="0" value={form.qty} required
                 onChange={(e) => setForm({ ...form, qty: parseFloat(e.target.value) })}
-                className="mt-1 w-full rounded border border-[#28364a] bg-[#0a0f14] px-2 py-1 text-[12px] text-slate-200" />
+                className="mt-1 w-full rounded border border-[#C9BFA8] bg-[#FFFDF7] px-2 py-1 text-[12px] text-[#2F3528]" />
             </label>
             <label>
-              <div className="text-[10px] uppercase text-slate-500">Type</div>
+              <div className="text-[10px] uppercase text-[#777B68]">Type</div>
               <select value={form.entry_type} onChange={(e) => setForm({ ...form, entry_type: e.target.value })}
-                className="mt-1 w-full rounded border border-[#28364a] bg-[#0a0f14] px-2 py-1 text-[12px] text-slate-200">
+                className="mt-1 w-full rounded border border-[#C9BFA8] bg-[#FFFDF7] px-2 py-1 text-[12px] text-[#2F3528]">
                 {ENTRY_TYPES.map((t) => <option key={t}>{t}</option>)}
               </select>
             </label>
             <label className="col-span-4">
-              <div className="text-[10px] uppercase text-slate-500">Note</div>
+              <div className="text-[10px] uppercase text-[#777B68]">Note</div>
               <input value={form.note} placeholder="e.g. winter stock, exercise draw"
                 onChange={(e) => setForm({ ...form, note: e.target.value })}
-                className="mt-1 w-full rounded border border-[#28364a] bg-[#0a0f14] px-2 py-1 text-[12px] text-slate-200" />
+                className="mt-1 w-full rounded border border-[#C9BFA8] bg-[#FFFDF7] px-2 py-1 text-[12px] text-[#2F3528]" />
             </label>
             <button type="submit"
-              className="col-span-2 rounded border border-amber-700 bg-amber-950/40 px-3 py-1.5 text-[12px] text-amber-300 hover:bg-amber-950/70">
+              className="col-span-2 rounded border border-[#2F3B25] bg-[#3B4A2F] px-3 py-1.5 text-[12px] font-semibold text-[#F7F3E7] hover:bg-[#4A5A3C]">
               RECORD LOCALLY →
             </button>
           </form>
 
           {/* ledger table */}
-          <div className="min-h-0 flex-1 overflow-y-auto rounded border border-[#1d2836] bg-[#0b1118]">
+          <div className="min-h-0 flex-1 overflow-y-auto rounded border border-[#D5CCB8] bg-[#F7F3E8]">
             {entries.length === 0 ? (
-              <div className="p-6 text-center text-[11px] text-slate-600">
+              <div className="p-6 text-center text-[11px] text-[#8A8D7A]">
                 Local ledger empty. Entries are hash-chained and stored in IndexedDB -
                 they survive page reloads and backend outages.
               </div>
             ) : (
               <table className="w-full text-[11px]">
-                <thead className="sticky top-0 bg-[#0d141c] text-slate-500">
+                <thead className="sticky top-0 bg-[#EEE7D7] text-[#5C624F]">
                   <tr>
                     <th className="px-2 py-1 text-left font-normal">#</th>
                     <th className="px-2 py-1 text-left font-normal">Time</th>
@@ -205,17 +205,17 @@ export default function EdgeClient() {
                   {entries.map((e) => {
                     const bad = chainCheck && !chainCheck.ok && chainCheck.at.seq === e.seq
                     return (
-                      <tr key={e.seq} className={`border-t border-[#141d28] ${bad ? 'bg-rose-950/30' : ''}`}>
-                        <td className="px-2 py-1 text-slate-500">{e.seq}</td>
-                        <td className="px-2 py-1 text-slate-500">{e.client_ts.slice(5, 16).replace('T', ' ')}</td>
-                        <td className={`px-2 py-1 ${e.entry_type === 'receipt' ? 'text-emerald-400' : 'text-amber-400'}`}>{e.entry_type}</td>
-                        <td className="px-2 py-1 text-slate-300">{e.fob_id} · {e.class_id}</td>
-                        <td className="px-2 py-1 text-right text-slate-300">{e.qty}</td>
-                        <td className="px-2 py-1 font-mono text-slate-600">{e.hash.slice(0, 10)}…</td>
+                      <tr key={e.seq} className={`border-t border-[#E3DCCB] ${bad ? 'bg-[#F5E3E0]' : ''}`}>
+                        <td className="px-2 py-1 text-[#777B68]">{e.seq}</td>
+                        <td className="px-2 py-1 text-[#777B68]">{e.client_ts.slice(5, 16).replace('T', ' ')}</td>
+                        <td className={`px-2 py-1 ${e.entry_type === 'receipt' ? 'text-[#3F6B3F]' : 'text-[#A66A00]'}`}>{e.entry_type}</td>
+                        <td className="px-2 py-1 text-[#3D4434]">{e.fob_id} · {e.class_id}</td>
+                        <td className="px-2 py-1 text-right text-[#3D4434]">{e.qty}</td>
+                        <td className="px-2 py-1 font-mono text-[#8A8D7A]">{e.hash.slice(0, 10)}…</td>
                         <td className="px-2 py-1">
                           {e.synced
-                            ? <span className="text-emerald-500">synced</span>
-                            : <span className="text-slate-500">pending</span>}
+                            ? <span className="text-[#3F6B3F]">synced</span>
+                            : <span className="text-[#777B68]">pending</span>}
                         </td>
                       </tr>
                     )
@@ -225,7 +225,7 @@ export default function EdgeClient() {
             )}
           </div>
           {chainCheck && !chainCheck.ok && (
-            <div className="mt-2 rounded border border-rose-900/60 bg-rose-950/40 px-3 py-2 text-[11px] text-rose-300">
+            <div className="mt-2 rounded border border-[#D9B3AD] bg-[#F5E3E0] px-3 py-2 text-[11px] text-[#8B2E2E]">
               LOCAL CHAIN BROKEN at seq {chainCheck.at.seq}: hash does not match content.
               Sync will reject this entry (and everything after it).
             </div>
@@ -233,53 +233,53 @@ export default function EdgeClient() {
         </div>
 
         {/* right: sync panel */}
-        <aside className="w-[340px] border-l border-[#1b2735] bg-[#0b1118] p-4">
-          <div className="mb-3 text-[11px] uppercase tracking-widest text-slate-400">Sync</div>
+        <aside className="w-[340px] border-l border-[#D5CCB8] bg-[#F7F3E8] p-4">
+          <div className="mb-3 text-[11px] uppercase tracking-widest text-[#5C624F]">Sync</div>
           <div className="mb-3 grid grid-cols-2 gap-2 text-center text-[11px]">
-            <div className="rounded border border-[#233140] bg-[#0d141c] p-2">
-              <div className="text-slate-500">Local entries</div>
-              <div className="text-lg text-slate-200">{entries.length}</div>
+            <div className="rounded border border-[#CFC5AE] bg-[#FCFAF3] p-2">
+              <div className="text-[#777B68]">Local entries</div>
+              <div className="text-lg text-[#2F3528]">{entries.length}</div>
             </div>
-            <div className="rounded border border-[#233140] bg-[#0d141c] p-2">
-              <div className="text-slate-500">Pending sync</div>
-              <div className={`text-lg ${pending.length ? 'text-amber-400' : 'text-emerald-400'}`}>{pending.length}</div>
+            <div className="rounded border border-[#CFC5AE] bg-[#FCFAF3] p-2">
+              <div className="text-[#777B68]">Pending sync</div>
+              <div className={`text-lg ${pending.length ? 'text-[#A66A00]' : 'text-[#3F6B3F]'}`}>{pending.length}</div>
             </div>
           </div>
           <button onClick={doSync} disabled={busy || !pending.length || backendUp === false}
-            className="mb-2 w-full rounded border border-cyan-700 bg-cyan-950/40 px-3 py-2 text-[12px] text-cyan-300 hover:bg-cyan-950/70 disabled:opacity-40">
+            className="mb-2 w-full rounded border border-[#2F3B25] bg-[#3B4A2F] px-3 py-2 text-[12px] font-semibold text-[#F7F3E7] hover:bg-[#4A5A3C] disabled:opacity-40">
             {backendUp === false ? 'BACKEND DOWN — CANNOT SYNC' : `SYNC ${pending.length} ENTRIES`}
           </button>
           <button onClick={tamperLast} disabled={!entries.length}
-            className="mb-2 w-full rounded border border-rose-800 bg-rose-950/30 px-3 py-1.5 text-[10px] text-rose-400 hover:bg-rose-950/60 disabled:opacity-40">
+            className="mb-2 w-full rounded border border-[#B5766B] bg-[#F5E3E0] px-3 py-1.5 text-[10px] text-[#8B2E2E] hover:bg-[#EDD3CE] disabled:opacity-40">
             SIMULATE HAND-EDIT OF LAST ENTRY (tamper test)
           </button>
           <button onClick={resetLedger}
-            className="mb-4 w-full rounded border border-slate-700 px-3 py-1.5 text-[10px] text-slate-500 hover:bg-[#141d28]">
+            className="mb-4 w-full rounded border border-[#8E9A7A] px-3 py-1.5 text-[10px] text-[#777B68] hover:bg-[#F0EADA]">
             CLEAR LOCAL LEDGER (reset demo)
           </button>
 
           {syncResult && (
-            <div className={`rounded border p-3 text-[11px] ${syncResult.error ? 'border-rose-900/60 bg-rose-950/40 text-rose-300' : syncResult.rejected ? 'border-amber-900/60 bg-amber-950/30 text-amber-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
+            <div className={`rounded border p-3 text-[11px] ${syncResult.error ? 'border-[#D9B3AD] bg-[#F5E3E0] text-[#8B2E2E]' : syncResult.rejected ? 'border-[#DCC49A] bg-[#F7ECD6] text-[#8A5A18]' : 'border-[#B7C9A8] bg-[#E7EFE2] text-[#3F6B3F]'}`}>
               {syncResult.error ? syncResult.error : (
                 <>
                   <div className="mb-1 font-semibold">
                     SYNC: {syncResult.accepted} accepted · {syncResult.rejected} rejected
                   </div>
-                  {syncResult.reason && <div className="mb-2 text-rose-300">{syncResult.reason}</div>}
+                  {syncResult.reason && <div className="mb-2 text-[#8B2E2E]">{syncResult.reason}</div>}
                   {syncResult.entries?.rejected?.map((r) => (
-                    <div key={r.id} className="text-rose-300">
+                    <div key={r.id} className="text-[#8B2E2E]">
                       seq {r.seq} ({r.id.slice(0, 8)}…): {r.errors.join('; ')}
                     </div>
                   ))}
                   {syncResult.entries?.accepted?.some((a) => a.note) && (
-                    <div className="text-slate-400">duplicates detected and skipped</div>
+                    <div className="text-[#5C624F]">duplicates detected and skipped</div>
                   )}
                 </>
               )}
             </div>
           )}
 
-          <div className="mt-6 space-y-2 text-[10px] leading-relaxed text-slate-600">
+          <div className="mt-6 space-y-2 text-[10px] leading-relaxed text-[#8A8D7A]">
             <p>Each entry stores sha256(seq | prev_hash | payload | fob | class | type | qty).
               Editing any field without re-hashing breaks the chain — the server recomputes
               every hash at sync and rejects tampered entries.</p>
