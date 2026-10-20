@@ -1,0 +1,28 @@
+services:
+  backend:
+    build: ./backend
+    container_name: drona-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - drona-data:/app/backend/data
+    environment:
+      - DRONA_DB=/app/backend/data/drona.db
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  frontend:
+    build: ./frontend
+    container_name: drona-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  drona-data:
