@@ -1,7 +1,10 @@
-import { Map as maplibreglMap, Marker, NavigationControl, Popup as maplibreglPopup } from 'maplibre-gl'
+import { Map as maplibreglMap, Marker, NavigationControl, AttributionControl, Popup as maplibreglPopup } from 'maplibre-gl'
 import { useEffect, useRef } from 'react'
 
-// Dark tactical style: no external tile sources (runtime makes zero network calls).
+// Dark tactical style. The satellite basemap is NOT part of this style: it is
+// added after 'load' (see addBasemap) so a slow or failed image fetch can never
+// block the load event and blank out the operational layers.
+// Assets are locally vendored (tools/build_basemap.py) — zero runtime network calls.
 const STYLE = {
   version: 8,
   sources: {
@@ -13,9 +16,61 @@ const STYLE = {
       id: 'grid',
       type: 'line',
       source: 'grid',
-      paint: { 'line-color': '#101820', 'line-width': 1 },
+      paint: { 'line-color': '#101820', 'line-width': 1, 'line-opacity': 0.4 },
     },
   ],
+}
+
+// Corner coords from the .json sidecars written by tools/build_basemap.py.
+const BASEMAP_LAYERS = [
+  {
+    source: {
+      sat: {
+        type: 'image',
+        url: '/satellite/ladakh_sat.jpg',
+        coordinates: [[72.7734375, 37.16031654673675], [82.265625, 37.16031654673675],
+                      [82.265625, 30.751277776257805], [72.7734375, 30.751277776257805]],
+      },
+    },
+    layer: {
+      id: 'sat',
+      type: 'raster',
+      source: 'sat',
+      paint: { 'raster-saturation': -0.35, 'raster-brightness-max': 0.85 },
+    },
+  },
+  {
+    source: {
+      hill: {
+        type: 'image',
+        url: '/satellite/ladakh_hillshade.jpg',
+        coordinates: [[72.421875, 37.16031654673675], [82.265625, 37.16031654673675],
+                      [82.265625, 30.751277776257805], [72.421875, 30.751277776257805]],
+      },
+    },
+    layer: {
+      id: 'hill',
+      type: 'raster',
+      source: 'hill',
+      paint: { 'raster-opacity': 0.3 },
+    },
+  },
+]
+
+// Adds the satellite imagery + hillshade just above the background, below every
+// operational layer. Non-fatal: if either image fails, the tactical map still
+// renders on the plain dark style.
+function addBasemap(map) {
+  if (map.getSource('sat')) return
+  try {
+    for (const { source, layer } of BASEMAP_LAYERS) {
+      const id = Object.keys(source)[0]
+      map.addSource(id, source[id])
+      map.addLayer(layer, 'grid')
+    }
+  } catch (err) {
+    console.error('basemap unavailable, continuing without imagery:', err)
+  }
 }
 
 function gridGeo() {
@@ -63,6 +118,13 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
     })
     mapRef.current = map
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right')
+    map.addControl(new AttributionControl({
+      compact: true,
+      customAttribution: 'Imagery: Esri, Maxar, Earthstar Geographics · Terrain: Mapzen/AWS (SRTM)',
+    }), 'bottom-right')
+    map.on('error', (e) => console.error('maplibre error:', e?.error?.message || e))
+    if (map.isStyleLoaded()) addBasemap(map)
+    else map.once('load', () => addBasemap(map))
     return () => { map.remove(); mapRef.current = null }
   }, [])
 
