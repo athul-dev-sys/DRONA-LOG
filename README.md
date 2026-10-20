@@ -1,8 +1,8 @@
 # DRONA-LOG
 
-**Predictive logistics and forward supply chain for high-altitude military formations.**
+**Predictive logistics and terrain-aware resupply for high-altitude military formations.**
 
-SIH problem statement **SIH26251** · Ladakh sector prototype
+SIH 2026 · Problem Statement **SIH26251** · Team **Subterra Mesh (185972)**
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](backend)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](backend)
@@ -12,39 +12,101 @@ SIH problem statement **SIH26251** · Ladakh sector prototype
 [![MapLibre](https://img.shields.io/badge/MapLibre-GL-295DAA)](frontend/src/components/TacticalMap.jsx)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
-DRONA-LOG is a working end-to-end prototype that forecasts demand at forward
-operating bases, routes supplies over an elevation-penalised mountain road
-network, allocates them with a mixed-integer optimiser, replans automatically
-when a strategic pass closes, and keeps requisitions working when the backend is
-offline through a tamper-evident edge ledger.
+DRONA-LOG is a working end-to-end prototype for forward-area supply chains. It
+forecasts demand at forward operating bases, routes supplies over an
+elevation-penalised mountain network, allocates limited transport with a
+mixed-integer optimiser, automatically re-plans when a strategic pass closes,
+and keeps field requisitions working when the backend is unreachable.
 
 ![DRONA-LOG command view](docs/command-view.png)
 
-> **All data is synthetic.** Every operational number is labelled `SIMULATED`
-> and is computed at runtime from a seeded 30-day simulation. Nothing is
-> hardcoded — including the trade-offs that do not flatter the system.
+> **All operational data is synthetic.** Every scenario figure is recomputed
+> from a deterministic 30-day simulation and labelled `SIMULATED`. The
+> trade-offs that do not flatter the system are shown as well.
 
 ---
 
-## The problem
+## Overview
 
 Forward posts in Ladakh depend on a small number of high-altitude corridors.
 Zoji La can close for days, weather and gradient make routes expensive, demand
-is seasonal and troop-driven, and connectivity at the edge is unreliable.
-A conventional spreadsheet-and-experience process reacts late, hoards inventory
-at depots, and holds requisitions when a corridor shuts.
+is seasonal and troop-driven, and connectivity at the edge is unreliable. A
+static spreadsheet plan reacts late, hoards stock at depots and holds
+requisitions when a corridor shuts.
 
-DRONA-LOG closes that loop:
+DRONA-LOG closes that loop in one system:
 
 | Capability | Implementation |
 |---|---|
-| Anticipate demand | LightGBM per supply class, 7-day horizon, weather + troop features |
-| Choose realistic routes | A* with a gradient penalty; closed passes removed from the graph |
-| Allocate scarce capacity | OR-Tools MILP on SCIP: trucks, loads, depot stock, safety buffers, corridor inflow |
-| React to a closure | Reroute + re-solve + before/after convoy diff + measured solve time |
-| Operate at the edge | React client, IndexedDB, append-only SHA-256 hash chain, offline requisitions |
-| Reconcile safely | Server recomputes every hash and rejects tampered, replayed or broken chains |
-| Measure honestly | Naive baseline vs DRONA-LOG on the same 30-day seeded scenario |
+| Anticipate demand | LightGBM per supply class, 7-day horizon, weather and troop features |
+| Choose realistic routes | A* with a gradient penalty; closed passes are removed from the graph |
+| Allocate scarce capacity | OR-Tools MILP on SCIP: fleet, loads, depot stock, buffers, corridor inflow |
+| React to a closure | Reroute, re-solve, return a convoy diff and measured solve time |
+| Operate at the edge | React edge client, IndexedDB, SHA-256 hash-chained local ledger |
+| Reconcile safely | Server recomputes hashes, rejects tampering, gaps and broken links |
+| Measure honestly | Naive policy vs DRONA on the same seeded 30-day scenario |
+
+The prototype is decision support, not an autonomous command system: every plan
+is visible to an operator, and a closure is a human-triggered event that can be
+reopened.
+
+---
+
+## Prototype results
+
+The 30-day comparison uses identical synthetic demand, weather, troop surge and
+a scripted Zoji La closure on days 10–16. All figures are generated at runtime
+by `backend/app/simulate.py` and labelled `SIMULATED`.
+
+| Metric (30 days) | Naive policy | DRONA-LOG | Change |
+|---|---:|---:|---:|
+| Stockout units | 4.15 | 0.25 | **−93.9%** |
+| Below-buffer unit-days | 983.9 | 493.3 | **−49.9%** |
+| Cost per unit demand | ₹30,242 | ₹25,619 | **−15.3%** |
+| Trucks dispatched | 207 | 160 | **−22.7%** |
+| Truck-km per unit demand | 34.46 | 42.06 | **+22.1%** |
+| Convoy holds | 258 | 0 | see note |
+
+**Note on the last two rows.** Truck-km per unit is a fuel proxy, and it rises
+because the system keeps delivering through the longer southern corridor while
+Zoji La is shut. That is an explicit availability-versus-fuel trade-off, not a
+saving. The naive policy enters a hold state when the west corridor closes;
+DRONA re-plans through the alternate corridor, so its hold counter is zero by
+design rather than a measured reduction in an equivalent queue.
+
+The prototype does **not** claim fuel savings. It claims better availability,
+lower cost per unit and fewer buffer violations, with the fuel penalty exposed.
+
+---
+
+## Screens
+
+### Command view
+
+The map-first operating screen shows the Ladakh network, corridor state, planned
+convoys, the 7-day allocation plan, FOB stock against safety buffers, closure
+timings and the simulated impact cards.
+
+![Command view](docs/command-view.png)
+
+### Closure workflow
+
+Closing Zoji La removes the west gateway from the route graph, selects the
+Manali corridor, re-solves the MILP and returns the before/after convoy diff.
+
+![Zoji La closure](docs/pass-closure.png)
+
+### Edge client
+
+Field requisitions are stored in IndexedDB with a hash-chained ledger. The
+client keeps working when the backend stops; on reconnection it syncs the chain
+and rejects a hand-edited entry.
+
+![Tamper-evident edge ledger](docs/edge-tamper.png)
+
+The app has two operator views (`/` and `/edge`) plus interactive FastAPI
+documentation at `/docs`. Map tiles and assets are local, so the demo does not
+depend on a CDN or tile server.
 
 ---
 
@@ -54,122 +116,33 @@ DRONA-LOG closes that loop:
 docker compose up --build
 ```
 
-Open:
-
-| URL | Screen |
+| URL | Purpose |
 |---|---|
-| http://localhost:8080 | Command view — map, allocation plan, metrics, closure simulation |
-| http://localhost:8080/edge | Edge client — offline requisitions and sync |
+| http://localhost:8080 | Command view |
+| http://localhost:8080/edge | Offline edge client |
 | http://localhost:8000/docs | FastAPI / OpenAPI documentation |
 
-First boot seeds the database with 49 nodes, 53 road edges, 12 months of daily
-consumption history and 10 FOBs, then trains three LightGBM models. Allow about
-30 seconds; the frontend waits for the backend healthcheck.
+First boot seeds 49 nodes, 53 road edges and 10 FOBs, generates 365 days of
+synthetic history and trains three LightGBM models. Allow about 30 seconds; the
+frontend waits for the backend healthcheck. The seed is deterministic
+(`26251`), so restarts reproduce the same scenario.
 
-The seed is deterministic (seed `26251`), so restarts reproduce the same
-scenario. To return to a clean demonstration state:
+To reset the demonstration:
 
 ```bash
 docker compose down -v && docker compose up -d
 ```
 
-No runtime API keys, tile servers, CDNs or external data services are required.
+No API keys, external data services or tile servers are required at runtime.
 
 ---
 
 ## 2-minute demo
 
-**0:00 — Command view** ([screenshot](docs/command-view.png))
-
-- Dark tactical map of Ladakh with 1 base depot (Leh), 2 staging depots
-  (Karu, Upshi), 10 FOBs and 12 named passes.
-- Green = open Zoji La (west) corridor, cyan = Manali (south) corridor,
-  amber dashed = planned convoys.
-- Right panel: 7-day MILP plan, FOB stock vs safety buffer, and 30-day
-  **SIMULATED** impact versus a naive resupply policy.
-- Solved plan on the seeded run: **OPTIMAL**, zero stockouts, 15 truck
-  dispatches, ₹23.1 L objective, solve time displayed live in milliseconds.
-
-**0:30 — Close Zoji La**
-
-- Press **CLOSE ZOJI LA — WEST CORRIDOR**.
-- The west corridor turns red, the router selects the Manali → Leh alternate,
-  and the MILP re-solves against closed-pass routes and reduced south-corridor
-  inflow capacity.
-- The panel shows both timings (example run: **15.4 ms** reroute,
-  **439 ms** re-solve), the convoy diff (**6 cancelled / 5 added / 4 changed**
-  in that run), and the resulting depot inventory projection.
-
-![Pass closure flow](docs/pass-closure.png)
-
-- Press **REOPEN ZOJI LA** to restore the west corridor.
-
-**1:10 — Read the honest metrics**
-
-The comparison uses the identical seeded demand, weather, troop surge and
-scripted 7-day closure:
-
-| Metric (30-day simulation) | Naive policy | DRONA-LOG | Change |
-|---|---:|---:|---:|
-| Stockout units | 4.15 | 0.25 | **−93.9%** |
-| Requisitions held | 258 | 0 | **−100%** |
-| Cost per unit demand | ₹30,242 | ₹25,619 | **−15.3%** |
-| Fuel per unit demand (km) | 34.46 | 42.06 | **+22.1%** |
-| Below-buffer unit-days | 983.9 | 493.3 | **−49.9%** |
-
-The last row is deliberately not hidden: during the closure DRONA-LOG keeps
-delivering through the longer southern corridor, which costs fuel. The point is
-availability with an explicit trade-off, not a slide with invented savings.
-Every figure is recomputed from the simulation at runtime and labelled
-`SIMULATED`.
-
-**1:40 — Offline edge client** ([tamper evidence](docs/edge-tamper.png))
-
-1. Open http://localhost:8080/edge and record two or three requisitions.
-2. Stop the backend: `docker compose stop backend`.
-3. The status flips to **BACKEND OFFLINE**; requisitions still record locally
-   in IndexedDB with a hash-chained ledger.
-4. Restart: `docker compose start backend`. Wait for **BACKEND ONLINE**, press
-   **SYNC** — all pending entries are accepted and server stock is updated.
-5. Press **SIMULATE HAND-EDIT OF LAST ENTRY**, then **SYNC** again. The entry's
-   quantity is changed without re-hashing, so the server rejects it:
-   **0 accepted · 1 rejected — HASH MISMATCH**. Entries already accepted on the
-   server stay valid, while the local chain is flagged broken.
-6. Use **CLEAR LOCAL LEDGER** to reset the demo.
-
-**2:00 — Audit trail**
-
-`GET /api/events` returns every closure/reopen with router time, solve time and
-the plan diff. `GET /api/ledger` returns the server-side hash chain grouped by
-device.
-
----
-
-## Acceptance criteria and evidence
-
-| Criterion | Implementation | Verified evidence |
-|---|---|---|
-| Feasible baseline plan with zero stockouts | MILP with soft stockout/buffer penalties, 7-day horizon, capacity and fleet constraints | `test_baseline_plan_feasible_zero_stockouts`, `test_plan_zero_stockouts`; seeded run: `OPTIMAL`, 0 stockout units, 15 deliveries |
-| Closure produces a valid alternate and a new plan | Closed pass removed from graph, A* remaps every depot→FOB route, MILP re-solves, diff and timings returned | `test_zojila_closure_severs_west_corridor`, `test_pass_closure_flow`; west route `None`, south route valid and avoids ZOJILA; new plan has higher cost |
-| Solve time displayed | Wall-clock solve time stored in every plan and closure event | Returned as `solve_time_ms` / `re_solve` and rendered in the closure panel (example **439 ms**) |
-| Offline entries sync after restart | IndexedDB append-only ledger, server idempotent sync, stock applied on acceptance | Live demo: 2 entries recorded with backend stopped, 2 accepted after restart; `test_sync_after_backend_restart` |
-| Hand-edited entry is rejected | Server recomputes SHA-256 over canonical fields; verifies sequence and previous link | `test_tampered_entry_rejected`, `test_tampered_payload_rejected`, `test_tampered_replay_rejected`; production UI: **0 accepted · 1 rejected** |
-| One-command bring-up | Docker Compose: backend healthcheck, nginx SPA + `/api` proxy, persistent SQLite volume | Stack verified healthy from `http://localhost:8080/api/health` and `http://localhost:8000/api/health` |
-| Metrics are computed, not hardcoded | Naive policy and DRONA policy simulated on the same seed; all cards labelled SIMULATED | `test_metrics_computed_not_hardcoded`, `test_drona_beats_naive_on_stockouts_and_holds`; live values match raw simulation counters |
-| README with run steps and demo | This document | `docker compose up --build`, local fallback, 2-minute script, API reference |
-
-Test suites:
-
-```bash
-cd backend  && python -m pytest tests/ -q    # 24 passed
-cd frontend && npx vitest run                # 6 passed (JS/Python hash parity)
-cd frontend && npm run build                 # production bundle
-```
-
-The 24 backend tests cover the API surface, forecast shape, baseline planning,
-gradient-aware routing, closure reachability scenarios, metrics consistency,
-offline/restart sync, idempotent replay, tampered entries, broken previous-hash
-links and sequence gaps.
+[Watch the 2:33 narrated walkthrough](docs/drona-log-demo.mp4) — command view,
+Zoji La closure and Manali reroute, offline requisition sync, and a rejected
+hash-chain tamper. The MP4 is stored in `docs/`; no script is required to run
+the prototype.
 
 ---
 
@@ -179,13 +152,14 @@ links and sequence gaps.
 flowchart LR
     subgraph Edge["Edge device (browser)"]
         UI["React edge client"]
-        IDB[("IndexedDB\nappend-only ledger")]
+        IDB[("IndexedDB\nhash-chained ledger")]
         UI --> IDB
     end
 
-    subgraph Frontend["Command frontend"]
-        MAP["MapLibre GL\nschematic Ladakh map"]
+    subgraph Client["Command client"]
+        MAP["MapLibre GL\nlocal tactical style"]
         VIEW["React command view"]
+        MAP --> VIEW
     end
 
     subgraph Backend["FastAPI backend"]
@@ -204,126 +178,110 @@ flowchart LR
 
     DB[("SQLite\nnodes · edges · forecasts\nplans · events · ledger")]
     VIEW --> API
-    MAP --> VIEW
     UI -->|"POST /api/sync\n(when online)"| API
-    Backend <--> DB
     FC <--> DB
+    RT <--> DB
+    MILP <--> DB
+    SIM <--> DB
+    SYNC <--> DB
 ```
 
 ### Demand forecast
 
-- Three models (classes **I** rations, **III** POL, **V** ammunition), trained
-  locally on 365 days of synthetic history.
-- Features: daily mean temperature, snowfall, troop strength and day of week.
-- LightGBM regression with 300 trees; 7-day operational horizon.
-- Forecast output drives the MILP demand vector.
+Three LightGBM regressors (Class I rations, Class III POL, Class V ammunition)
+are trained locally on 365 days of seeded history. Features are daily mean
+temperature, snowfall, troop strength and day of week. Each model uses 300
+trees, a 0.05 learning rate, 31 leaves and a fixed random state. The 7-day
+forecast becomes the demand vector for the allocator.
 
 ### Routing
 
-- Graph from the synthetic Ladakh network; edge geometry is interpolated.
-- A* cost is `distance_km + 6 × gradient_percent`. A climb therefore costs more
-  than its map distance, and the returned route reports the gradient penalty.
-- Pass nodes are removed for closures. Zojila closure removes the west gateway
-  path and forces the Manali route; Khardung La closure routes Nubra traffic via
-  Wari La.
-- Route matrix is computed for each depot→FOB pair and fed to the MILP.
+The road graph is drawn from a simplified Ladakh network. Edge distance is
+`1.25 × haversine`, with a 3 km minimum; gradient is derived from endpoint
+elevation. A* minimises:
+
+```text
+edge cost = distance_km + 6.0 × gradient_percent
+```
+
+A closure deletes the pass node and all incident edges. The west corridor is
+severed by Zoji La, Namika La or Fotu La; the south corridor by Rohtang,
+Baralacha or Tanglang La. Khardung La closure routes Nubra traffic through the
+alternate Wari La path. The router also returns the distance, gradient penalty,
+maximum elevation and legs used by the UI.
 
 ### Allocation MILP
 
-Integer truck and continuous load decisions over a 7-day horizon. The objective
-minimises:
+Integer truck dispatches and continuous loads are solved over a 7-day horizon.
+The objective minimises transport cost, fixed dispatch cost, procurement cost,
+stockout penalty, safety-buffer deficit and a small day-escalation term:
 
-- transport: `cost-km × units × ₹42/unit-km`,
-- fixed dispatch cost: ₹4,000 per truck,
-- procurement: ₹18,000/unit via west, ₹24,000/unit via south,
-- stockout penalty: ₹500,000 per unmet unit,
-- safety-buffer deficit: ₹60,000 per unit-day,
-- a small day-escalation term to break procurement symmetry.
+| Term | Value used in the prototype |
+|---|---:|
+| Transport | ₹42 × distance_km × units |
+| Dispatch | ₹4,000 per truck |
+| Procurement | ₹18,000/unit west; ₹24,000/unit south |
+| Stockout | ₹500,000 per unmet unit |
+| Buffer deficit | ₹60,000 per unit-day |
+| Solver | SCIP, 10 s limit, 1% gap, 1 thread |
 
-Constraints include 10 units per truck, per-depot daily fleet limits, one-day
-delivery lead, FOB and depot stock balance, safety buffers, war-reserve depot
-levels, and closure-aware gateway inflow caps (south has materially less
-capacity than west). SCIP runs with a 1% gap and 10-second limit; wall time is
-reported to the UI.
+Constraints cover truck capacity (10 units), daily fleet limits, one-day
+delivery lead, FOB and depot stock balance, safety buffers, war reserves and
+corridor inflow caps. The south corridor has materially less inflow capacity
+than the west.
 
 ### Pass-closure flow
 
-`POST /api/events/pass-closure` persists the closure, rebuilds the graph,
-remaps route costs, re-solves the MILP, diffs the old and new delivery plans,
-records affected FOB routes and stores the event with both timings. The UI
-animates the corridor state from the same API payload, so the map, plan, diff
-and inventory chart never disagree.
+`POST /api/events/pass-closure` persists the event, rebuilds the graph, remaps
+the depot-to-FOB route matrix, re-solves the MILP, diffs the old and new plans,
+and stores router/solve timings. The UI reads the same event payload, so map,
+plan, diff and inventory never disagree.
 
-### Honest baseline simulation
+A recorded sample closure measured **28.5 ms** for rerouting and **688.5 ms**
+for the MILP re-solve; an earlier run measured 15.4 ms and 439 ms. Timings vary
+with machine and solver state. The plan diff for the recorded event was
+6 cancelled, 5 added and 4 changed convoys.
 
-`simulate.py` runs two policies against the same seeded 30-day demand:
+### Offline edge ledger
 
-- **Naive:** nearest-depot resupply, fixed 3-day lead, trailing-mean demand,
-  no forecast and no rerouting; convoys are held when Zoji La is shut.
-- **DRONA:** LightGBM demand, MILP dispatch, one-day lead, corridor-aware
-  replanning on closure days.
-
-The resulting counters feed the metric cards. Fuel per unit is worse for DRONA
-because availability is maintained via the south corridor during the closure;
-the UI presents that as a warning, not a success.
-
-### Edge ledger
-
-Each device maintains an append-only ledger in IndexedDB:
+Each browser device keeps a local ledger in IndexedDB. Entries are chained:
 
 ```text
 hash = SHA-256(seq | prev_hash | payload_json | fob_id | class_id | entry_type | qty)
-genesis: prev_hash = "0" × 64
+genesis prev_hash = "0" × 64
 ```
 
-The browser uses WebCrypto; the server uses Python `hashlib`. A unit test
-asserts byte-identical digests across both implementations. On sync, FastAPI:
+The browser uses WebCrypto and the server uses Python `hashlib`; a frontend test
+asserts byte-identical digests. On sync, FastAPI verifies the entry shape,
+recomputes the hash from canonical fields, enforces sequence and previous-hash
+links, accepts true duplicates idempotently, and rejects tampering, replayed
+changes, sequence gaps and broken links. Only accepted `receipt` entries update
+server stock; requisitions remain logged and verified.
 
-1. verifies entry shape and quantity bounds,
-2. recomputes the hash from canonical fields,
-3. enforces `seq = previous + 1` and the stored previous hash,
-4. idempotently accepts true duplicates,
-5. re-verifies an already-synced entry before reporting it as a duplicate,
-6. rejects tampering, replays with altered content, gaps and broken links,
-7. advances accepted replenishment entries into server stock.
-
----
-
-## Synthetic data
-
-| Entity | Count / detail |
-|---|---|
-| Nodes | 49 (2 gateways, 22 transit, 12 passes, 2 staging, 1 base depot, 10 FOBs) |
-| Road edges | 53, with distance, simulated gradient and geometry |
-| Passes | Zoji La, Namika La, Fotu La, Rohtang, Baralacha, Tanglang La, Khardung La, Wari La, Saser La, Chang La, Kaksang La, Umling La |
-| Supply classes | I — rations/fresh; III — POL; V — ammunition |
-| FOBs | DBO, Turtuk, Sasoma, Diskit, Durbuk, Spangmik, Chushul, Nyoma, Hanle, Demchok |
-| History | 365 days per FOB driven by temperature, snowfall, troops, exercise surge |
-| Stock | Per-FOB initial stock and 7-day safety buffer; depot war reserve |
-
-FOB coordinates, elevations and road topology are a simplified synthetic model
-for demonstration, not an authoritative operational map.
+The local ledger is a tamper-evidence mechanism, not an immutable distributed
+ledger: the demo can clear local storage to reset the scenario. Production would
+add device registration, signatures and durable replication.
 
 ---
 
-## API reference
+## API
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | `/api/health` | Seed/models/metrics readiness |
+| GET | `/api/health` | Seed, model and metrics readiness |
 | GET | `/api/network` | Nodes, edges, stock, gateway routes, corridor state |
 | GET | `/api/fobs` | FOB list with stock and demand context |
 | GET | `/api/forecast?days=7` | Per-FOB, per-class LightGBM forecast |
 | GET | `/api/plan` | Latest 7-day MILP plan (solves on first request) |
 | POST | `/api/plan/recompute` | Force a fresh MILP solve |
-| POST | `/api/events/pass-closure` | `{ "pass_id": "ZOJILA", "action": "closed" \| "reopened", "days": 7 }` → reroute, re-solve, diff, timings |
+| POST | `/api/events/pass-closure` | Close or reopen a pass; reroute, re-solve and diff |
 | GET | `/api/events` | Closure/reopen audit log |
-| GET | `/api/metrics` | SIMULATED naive-vs-DRONA comparison |
+| GET | `/api/metrics` | Naive-vs-DRONA 30-day comparison |
 | POST | `/api/metrics/recompute` | Recompute the 30-day comparison |
 | POST | `/api/sync` | Verify and ingest edge ledger entries |
-| GET | `/api/ledger` | Server ledger chains by device |
+| GET | `/api/ledger` | Server ledger rows in sequence order |
 
-Interactive schemas are available at `http://localhost:8000/docs`.
+Interactive schemas: `http://localhost:8000/docs`.
 
 ---
 
@@ -334,30 +292,46 @@ Interactive schemas are available at `http://localhost:8000/docs`.
 ├── backend/
 │   ├── app/
 │   │   ├── seed.py        synthetic theatre, weather, demand, road graph
-│   │   ├── graph.py       NetworkX graph builder (closure-aware)
-│   │   ├── router.py      elevation-penalised A* and route matrix
+│   │   ├── graph.py       closure-aware NetworkX graph builder
+│   │   ├── router.py      gradient-aware A* and route matrix
 │   │   ├── forecast.py    LightGBM models and forecast payload
 │   │   ├── allocator.py   OR-Tools / SCIP MILP
-│   │   ├── scenario.py    assembles solve inputs for a closure state
+│   │   ├── scenario.py    assembles inputs for a closure state
 │   │   ├── simulate.py    naive vs DRONA 30-day evaluation
-│   │   ├── main.py        FastAPI endpoints and sync verification
-│   │   └── config.py      network, fleet, cost and solver parameters
-│   ├── tests/             acceptance and invariant tests
+│   │   ├── main.py        FastAPI endpoints and ledger verification
+│   │   └── config.py      fleet, cost, solver and graph parameters
+│   ├── tests/             24 backend tests
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── views/CommandView.jsx    map, plan, metrics, closure flow
-│   │   ├── views/EdgeClient.jsx     offline requisitions and sync
+│   │   ├── views/CommandView.jsx
+│   │   ├── views/EdgeClient.jsx
 │   │   ├── components/TacticalMap.jsx
-│   │   └── edge/ledger.js           hash-chained IndexedDB ledger
-│   ├── nginx.conf         SPA fallback and /api proxy
+│   │   └── edge/ledger.js
+│   ├── nginx.conf
 │   ├── vite.config.js
 │   └── Dockerfile
-├── docs/                  verified UI screenshots
+├── docs/                  screenshots, report, idea template, demo video
 ├── docker-compose.yml
 └── README.md
 ```
+
+---
+
+## Tests
+
+```bash
+cd backend  && python -m pytest tests/ -q    # 24 passed
+cd frontend && npx vitest run                # 6 passed (hash parity and chain checks)
+cd frontend && npm run build                 # production bundle
+```
+
+The backend suite covers the API surface, forecast shape, baseline planning,
+gradient-aware routing, closure reachability, metric consistency, offline sync,
+idempotent replay, tampered entries, broken previous-hash links and sequence
+gaps. The frontend suite checks JavaScript/Python hash parity and rejection of
+hand-edited quantity, swapped links and gaps.
 
 ---
 
@@ -382,28 +356,41 @@ npm install
 npm run dev          # http://localhost:5173, proxies /api to :8000
 ```
 
-Production build: `npm run build` (nginx serves the generated `dist/` in the
-container image).
+Production build: `npm run build`.
 
 ---
 
 ## Limitations and next steps
 
-- This is a prototype on **synthetic** data; it is not connected to service
-  records, satellite weather or live road reports.
-- The edge ledger is per-device with a fixed genesis. Production would register
-  device keys, sign entries and use a durable replication log.
-- Sync applies accepted requisitions to stock but deliberately does not attempt
-  distributed conflict resolution between devices.
-- Route geometry is schematic, not survey-grade; map tiles are intentionally
-  local so the demo works without internet.
-- SCIP is time-limited with a 1% gap, so solve times and the final decimal of
-  the objective can vary slightly across machines. Operational figures are
-  recomputed, not baked into the UI.
-- Authentication/roles and classified-data handling are out of scope for this
-  prototype.
+- Synthetic data only. The prototype is not connected to service records,
+  satellite weather, live road reports or classified networks.
+- The road network is schematic; edge geometry is drawn node-to-node rather
+  than survey-grade.
+- Forecasts are point estimates; production should add uncertainty bands,
+  drift monitoring and retraining triggers.
+- The edge ledger uses a fixed per-device genesis and no device signatures or
+  distributed consensus. It is tamper-evident, not tamper-proof.
+- Sync applies accepted receipts to stock; it does not resolve conflicting
+  requisitions between devices or model a full stock ledger.
+- Authentication, RBAC, TLS termination, audit retention and classified-data
+  handling are out of scope for this prototype.
+- SQLite and a single backend worker are appropriate for the demo; production
+  would use PostgreSQL/PostGIS, a job queue and horizontal workers.
+- SCIP is time-limited with a 1% gap, so solve time and the last decimal of the
+  objective can vary across machines.
 
 ---
 
-Built as a working submission for **Smart India Hackathon problem statement
-SIH26251** — predictive logistics for the Indian Army in the Ladakh sector.
+## Documentation
+
+- [Detailed technical report](docs/DRONA-LOG_Detailed_Report.pdf) ·
+  [editable DOCX](docs/DRONA-LOG_Detailed_Report.docx)
+- [SIH idea template, 6-page PDF](docs/Subterra_Mesh_SIH26251_Idea_Template.pdf)
+- [Demo video, 2:33](docs/drona-log-demo.mp4)
+- [Submission answers](docs/SUBMISSION_ANSWERS.md)
+
+---
+
+Built for **Smart India Hackathon 2026**, problem statement **SIH26251** —
+predictive logistics and forward supply chain for the Indian Army. Team
+**Subterra Mesh**, Team ID **185972**.
