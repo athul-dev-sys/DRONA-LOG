@@ -4,6 +4,7 @@ Endpoints:
   GET  /api/health                 - liveness + db state
   GET  /api/network                - nodes, edges, closures for the map
   GET  /api/forecast?days=7        - LightGBM forecast per FOB
+  GET  /api/forecast/accuracy      - walk-forward backtest MAE per class
   GET  /api/plan                   - current 7-day MILP plan (solves + caches)
   GET  /api/plan/latest            - last stored plan
   POST /api/plan/recompute         - force a fresh solve
@@ -28,7 +29,7 @@ from pydantic import BaseModel, Field
 from . import config
 from .allocator import solve_plan
 from .db import connect, init_schema, is_seeded, kv_get, kv_set
-from .forecast import ensure_models, forecast_payload
+from .forecast import ensure_models, forecast_payload, walk_forward_backtest
 from .graph import build_graph
 from .router import gateway_routes, route
 from .scenario import build_inputs
@@ -39,7 +40,7 @@ app = FastAPI(title="DRONA-LOG", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                    allow_headers=["*"])
 
-_state = {"models": None, "metrics": None, "metrics_thread": None}
+_state = {"models": None, "metrics": None, "metrics_thread": None, "accuracy": None}
 GENESIS = "0" * 64
 
 
@@ -76,6 +77,18 @@ def startup():
         conn.close()
         _state["metrics"] = m
         print(f"[metrics] computed in {time.perf_counter()-t0:.1f}s")
+
+        # warm the forecast-accuracy cache too so the first UI load never
+        # blocks on the walk-forward backtest (12 LightGBM fits)
+        try:
+            t1 = time.perf_counter()
+            conn = get_db()
+            models = get_models(conn)
+            _state["accuracy"] = walk_forward_backtest(conn)
+            conn.close()
+            print(f"[accuracy] computed in {time.perf_counter()-t1:.1f}s")
+        except Exception as exc:  # noqa: BLE001 - accuracy is non-critical
+            print(f"[accuracy] skipped: {exc}")
 
     if _state["metrics_thread"] is None or not _state["metrics_thread"].is_alive():
         _state["metrics_thread"] = threading.Thread(target=bg_metrics, daemon=True)
@@ -207,6 +220,20 @@ def forecast(days: int = config.FORECAST_DAYS):
     out = forecast_payload(conn, models, start, days)
     conn.close()
     return out
+
+
+@app.get("/api/forecast/accuracy")
+def forecast_accuracy():
+    """Walk-forward backtest: MAE per class vs trailing-7-day-mean baseline."""
+    if _state["accuracy"] is not None:
+        return _state["accuracy"]
+    conn = get_db()
+    try:
+        acc = walk_forward_backtest(conn)
+    finally:
+        conn.close()
+    _state["accuracy"] = acc
+    return acc
 
 
 # ---------------- pass closure events ----------------

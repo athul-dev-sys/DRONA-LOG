@@ -102,10 +102,13 @@ function corridorShut(closedPasses, key) {
   return [...closed].some((p) => set.has(p)) ? 1 : 0
 }
 
-export default function TacticalMap({ network, plan, closure, onFobClick }) {
+export default function TacticalMap({ network, plan, closure, choreography, onFobClick }) {
   const ref = useRef(null)
   const mapRef = useRef(null)
   const clickRef = useRef(onFobClick)
+  const startRef = useRef(0)
+  const homeRef = useRef(null)       // saved full-theatre bounds for choreography return
+  const choreoRef = useRef(0)        // token: bumps cancel any running choreography
   clickRef.current = onFobClick
 
   useEffect(() => {
@@ -236,10 +239,10 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
       const focus = network.nodes.filter((n) => ['depot', 'staging', 'fob'].includes(n.kind))
       const lons = focus.map((n) => n.lon)
       const lats = focus.map((n) => n.lat)
-      map.fitBounds(
-        [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: 46, duration: 0 },
-      )
+      homeRef.current = {
+        bounds: [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+      }
+      map.fitBounds(homeRef.current.bounds, { padding: 46, duration: 0 })
 
       // hover popup for passes
       const popup = new maplibreglPopup({ closeButton: false, offset: 8 })
@@ -284,6 +287,188 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
     }
   }, [closure, network])
 
+  // ---- closure camera choreography ----
+  // Beat 1: fly to the closed pass. Beat 2: pass flashes red. Beat 3: west
+  // corridor pulses red. Beat 4: fly along the alternate (south) route with a
+  // flowing dash. Beat 5: settle back to the full-theatre view.
+  // Any user drag (movestart from a gesture) or a new choreography cancels it;
+  // paint properties we pulse are restored on cancel.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !choreography) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return
+
+    const token = ++choreoRef.current
+    const choreo = choreoRef              // stable local handle for cleanup/rAF
+    const myJob = () => choreo.current === token
+
+    const { lat, lon, route } = choreography   // pass coords from the event payload
+    if (lat == null || lon == null || !route?.length) return
+
+    const timers = []
+    const at = (ms, fn) => timers.push(setTimeout(() => { if (myJob()) fn() }, ms))
+    let raf = 0
+
+    // snapshot the paint props we animate so cancel/finish can restore them
+    const origPassRadius = map.getPaintProperty('pass-fill', 'circle-radius')
+    const origPassStroke = map.getPaintProperty('pass-fill', 'circle-stroke-width')
+    const origGwWidth = map.getPaintProperty('gw-line', 'line-width')
+    const origGwOpacity = map.getPaintProperty('gw-line', 'line-opacity')
+
+    const restore = () => {
+      cancelAnimationFrame(raf)
+      // map may already be removed (unmount cleanup order) — guard everything
+      if (!mapRef.current) return
+      try {
+        if (map.getLayer('pass-fill')) {
+          map.setPaintProperty('pass-fill', 'circle-radius', origPassRadius)
+          map.setPaintProperty('pass-fill', 'circle-stroke-width', origPassStroke)
+        }
+        if (map.getLayer('gw-line')) {
+          map.setPaintProperty('gw-line', 'line-width', origGwWidth)
+          map.setPaintProperty('gw-line', 'line-opacity', origGwOpacity)
+        }
+        if (map.getSource('choreo-flow')) {
+          map.removeLayer('choreo-flow')
+          map.removeSource('choreo-flow')
+        }
+      } catch { /* style tearing down */ }
+    }
+
+    const cancel = () => {
+      if (!myJob()) return
+      choreo.current++
+      timers.forEach(clearTimeout)
+      restore()
+      map.off('movestart', onGesture)
+    }
+    // a programmatic easeTo/flyTo does not fire drag events, but user
+    // interaction resets choreography — check who initiated via stopAlgo flag
+    let programmatic = false
+    const onGesture = () => { if (!programmatic) cancel() }
+
+    const goto = (opts) => {
+      programmatic = true
+      // easeTo has no bounds option — resolve bounds to center/zoom first,
+      // otherwise the camera silently stays put and the beat does nothing.
+      const { bounds, padding, ...rest } = opts
+      const target = bounds ? map.cameraForBounds(bounds, { padding: padding || 46 }) : rest
+      map.easeTo({ ...rest, ...target, essential: true, easing: (t) => t * t * (3 - 2 * t) })
+      // easeTo ends asynchronously; reopen the gesture gate right after
+      at(opts.duration + 50, () => { programmatic = false })
+    }
+
+    map.on('movestart', onGesture)
+
+    // ---- Beat 1 (0s): fly to the pass ----
+    const PASS_ZOOM = 9.5
+    goto({ center: [lon, lat], zoom: PASS_ZOOM, duration: 1200 })
+
+    // ---- Beat 2 (1.2s): pass flashes red 3x ----
+    at(1200, () => {
+      const t0 = performance.now()
+      const FLASH_MS = 900
+      const pulsePass = (now) => {
+        if (!myJob()) return
+        const t = now - t0
+        if (t >= FLASH_MS) {
+          // leave the pass closed-red (static state comes from the closure
+          // effect); just stop pulsing
+          return
+        }
+        const on = Math.floor(t / 150) % 2 === 0
+        map.setPaintProperty('pass-fill', 'circle-radius', on ? 9 : 5)
+        map.setPaintProperty('pass-fill', 'circle-stroke-width', on ? 3 : 1)
+        raf = requestAnimationFrame(pulsePass)
+      }
+      raf = requestAnimationFrame(pulsePass)
+    })
+
+    // ---- Beat 3 (2.1s): west corridor pulses red ----
+    at(2100, () => {
+      const t0 = performance.now()
+      const PULSE_MS = 700
+      const pulseGw = (now) => {
+        if (!myJob()) return
+        const t = now - t0
+        if (t >= PULSE_MS) return
+        const phase = (Math.sin((t / PULSE_MS) * Math.PI * 3) + 1) / 2
+        map.setPaintProperty('gw-line', 'line-width', 3 + phase * 3)
+        map.setPaintProperty('gw-line', 'line-opacity', 0.7 + phase * 0.3)
+        raf = requestAnimationFrame(pulseGw)
+      }
+      raf = requestAnimationFrame(pulseGw)
+    })
+
+    // ---- Beat 4 (2.5s): fly along the alternate route with flowing dash ----
+    at(2500, () => {
+      const coords = route.map((g) => [g[1], g[0]])    // [lat,lon] -> [lon,lat]
+      // overlay a bright flowing line on the alternate corridor
+      if (!map.getSource('choreo-flow')) {
+        map.addSource('choreo-flow', {
+          type: 'geojson',
+          data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords },
+                  properties: {} },
+        })
+        map.addLayer({
+          id: 'choreo-flow',
+          type: 'line',
+          source: 'choreo-flow',
+          paint: {
+            'line-color': '#22d3ee',
+            'line-width': 4,
+            'line-dasharray': [0.6, 0.6],
+            'line-opacity': 0.95,
+          },
+        }, 'gw-line')   // just above the corridor layer
+      }
+      // dash-flow: maplibre has no dash offset, so fake forward motion by
+      // cycling dash opacity — reads as "supply flowing down this corridor"
+      const t0 = performance.now()
+      const flow = (now) => {
+        if (!myJob()) return
+        const k = (Math.sin((now - t0) / 180) + 1) / 2
+        map.setPaintProperty('choreo-flow', 'line-opacity', 0.65 + k * 0.35)
+        raf = requestAnimationFrame(flow)
+      }
+      raf = requestAnimationFrame(flow)
+
+      // camera: ease to route midpoint at medium zoom, then to route bounds
+      const mid = coords[Math.floor(coords.length / 2)]
+      const lons = coords.map((c) => c[0])
+      const lats = coords.map((c) => c[1])
+      programmatic = true
+      map.easeTo({
+        center: mid, zoom: 7.6, duration: 900,
+        essential: true, easing: (t) => t * t * (3 - 2 * t),
+      })
+      at(950, () => {
+        goto({
+          bounds: [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+          padding: 70, duration: 800,
+        })
+      })
+    })
+
+    // ---- Beat 5 (~4.5s): settle home, clean up ----
+    at(4700, () => {
+      goto({ ...homeRef.current, padding: 46, duration: 600, pitch: 0, bearing: 0 })
+      at(700, () => {
+        if (!myJob()) return
+        timers.forEach(clearTimeout)
+        restore()
+        map.off('movestart', onGesture)
+      })
+    })
+
+    return () => {
+      choreo.current++           // unmount/new-choreography cancels everything
+      timers.forEach(clearTimeout)
+      restore()
+      map.off('movestart', onGesture)
+    }
+  }, [choreography])
+
   // ---- plan routes (delivery lines) ----
   useEffect(() => {
     const map = mapRef.current
@@ -314,6 +499,106 @@ export default function TacticalMap({ network, plan, closure, onFobClick }) {
     if (map.getSource('edges')) update()
     else map.on('load', update)
     return () => { map.off('load', update) }
+  }, [plan])
+
+  // ---- convoy animation: one moving dot per planned dispatch ----
+  // The 7-day horizon is compressed into a CYCLE loop: a convoy departs at the
+  // start of its plan-day, travels its route for TRAVEL_MS, then is delivered
+  // (hidden) until the cycle restarts.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !plan) return
+
+    const convoys = []
+    for (const dl of plan.deliveries || []) {
+      const r = plan.routes?.[`${dl.from}|${dl.to}`]
+      if (!r?.geometry?.length) continue
+      const pts = r.geometry.map((g) => [g[1], g[0]]) // [lon, lat]
+      const cum = [0]
+      for (let i = 1; i < pts.length; i++) {
+        // scale lon by cos(lat) so distances are roughly isotropic
+        const k = Math.cos((pts[i][1] + pts[i - 1][1]) / 2 * Math.PI / 180)
+        cum.push(cum[i - 1] + Math.hypot((pts[i][0] - pts[i - 1][0]) * k, pts[i][1] - pts[i - 1][1]))
+      }
+      if (cum[cum.length - 1] > 0) {
+        convoys.push({ day: dl.day, trucks: dl.trucks, pts, cum, total: cum[cum.length - 1] })
+      }
+    }
+
+    const DAY_MS = 3200
+    const TRAVEL_MS = 2600
+    const CYCLE_MS = 7 * DAY_MS
+    const EMPTY = { type: 'FeatureCollection', features: [] }
+
+    const ensureSource = () => {
+      if (map.getSource('convoys')) return
+      map.addSource('convoys', { type: 'geojson', data: EMPTY })
+      map.addLayer({
+        id: 'convoy-halo',
+        type: 'circle',
+        source: 'convoys',
+        paint: {
+          'circle-color': '#f59e0b',
+          'circle-radius': ['+', 6, ['*', 2.5, ['min', ['get', 'trucks'], 4]]],
+          'circle-blur': 1,
+          'circle-opacity': 0.35,
+        },
+      })
+      map.addLayer({
+        id: 'convoy-dot',
+        type: 'circle',
+        source: 'convoys',
+        paint: {
+          'circle-color': '#fbbf24',
+          'circle-radius': ['+', 3.5, ['*', 1.2, ['min', ['get', 'trucks'], 4]]],
+          'circle-stroke-color': '#0a0f14',
+          'circle-stroke-width': 1.5,
+        },
+      })
+    }
+
+    // smoothstep easing so trucks accelerate out of the depot and ease in
+    const ease = (p) => p * p * (3 - 2 * p)
+
+    const pointAt = (c, frac) => {
+      const target = ease(frac) * c.total
+      let i = 1
+      while (i < c.cum.length - 1 && c.cum[i] < target) i++
+      const seg = c.cum[i] - c.cum[i - 1] || 1
+      const f = (target - c.cum[i - 1]) / seg
+      return [
+        c.pts[i - 1][0] + (c.pts[i][0] - c.pts[i - 1][0]) * f,
+        c.pts[i - 1][1] + (c.pts[i][1] - c.pts[i - 1][1]) * f,
+      ]
+    }
+
+    let raf = 0
+    const tick = (now) => {
+      const t = (now - startRef.current) % CYCLE_MS
+      const feats = []
+      for (const c of convoys) {
+        const t0 = c.day * DAY_MS
+        if (t < t0 || t > t0 + TRAVEL_MS) continue
+        const [lon, lat] = pointAt(c, (t - t0) / TRAVEL_MS)
+        feats.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [lon, lat] },
+          properties: { trucks: c.trucks },
+        })
+      }
+      map.getSource('convoys')?.setData({ type: 'FeatureCollection', features: feats })
+      raf = requestAnimationFrame(tick)
+    }
+
+    const begin = () => {
+      ensureSource()
+      cancelAnimationFrame(raf)
+      startRef.current = performance.now()
+      raf = requestAnimationFrame(tick)
+    }
+    if (map.isStyleLoaded()) begin()
+    else map.once('load', begin)
+    return () => cancelAnimationFrame(raf)
   }, [plan])
 
   return <div ref={ref} className="h-full w-full" />

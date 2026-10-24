@@ -43,15 +43,18 @@ export default function CommandView() {
   const [busy, setBusy] = useState(false)
   const [selFob, setSelFob] = useState(null)
   const [forecast, setForecast] = useState(null)
+  const [accuracy, setAccuracy] = useState(null)     // walk-forward backtest
+  const [choreo, setChoreo] = useState(null)         // { passId, route } camera sequence
   const [err, setErr] = useState(null)
 
   const load = async () => {
     try {
       setErr(null)
-      const [n, p, m, f] = await Promise.all([
+      const [n, p, m, f, a] = await Promise.all([
         api('/api/network'), api('/api/plan'), api('/api/metrics'), api('/api/forecast?days=7'),
+        api('/api/forecast/accuracy'),
       ])
-      setNetwork(n); setPlan(p); setMetrics(m); setForecast(f)
+      setNetwork(n); setPlan(p); setMetrics(m); setForecast(f); setAccuracy(a)
       const closed = Object.keys(n.closed_passes || {})
       setClosedPass(closed[0] || null)
     } catch (e) { setErr(e.message) }
@@ -83,6 +86,12 @@ export default function CommandView() {
       setClosure(r)
       setClosedPass(action === 'closed' ? passId : null)
       setPlan(r.new_plan)
+      // camera story: fly to pass → flash → follow the alternate route.
+      // pass coords come straight from the event payload so a network
+      // refetch never restarts the running choreography.
+      setChoreo(action === 'closed'
+        ? { passId, lat: r.pass.lat, lon: r.pass.lon, route: r.gateway_routes?.south?.geometry, key: r.event_id }
+        : null)
       const n = await api('/api/network')
       setNetwork(n)
     } catch (e) { setErr(e.message) }
@@ -122,7 +131,7 @@ export default function CommandView() {
       <div className="flex min-h-0 flex-1">
         {/* left: map */}
         <div className="relative min-w-0 flex-1">
-          {network && <TacticalMap network={network} plan={plan} closure={closedPass} onFobClick={setSelFob} />}
+          {network && <TacticalMap network={network} plan={plan} closure={closedPass} choreography={choreo} onFobClick={setSelFob} />}
           {/* pass closure controls */}
           <div className="absolute left-3 top-3 rounded border border-[#CFC5AE] bg-[#F7F3E8]/95 p-3 backdrop-blur">
             <div className="mb-2 text-[10px] uppercase tracking-widest text-[#777B68]">Pass closure simulation</div>
@@ -156,7 +165,7 @@ export default function CommandView() {
               <span><span className="inline-block h-2 w-2 rounded-full bg-[#C08A2E]" /> FOB</span>
               <span><span className="inline-block h-2 w-2 rounded-full bg-[#8B2E2E]" /> closed pass</span>
             </div>
-            <div>corridor: <span className="text-[#3F6B3F]">green</span> open · <span className="text-[#8B2E2E]">red</span> closed · <span className="text-[#2F6F77]">teal</span> Manali · dashed amber = planned convoys</div>
+            <div>corridor: <span className="text-[#3F6B3F]">green</span> open · <span className="text-[#8B2E2E]">red</span> closed · <span className="text-[#2F6F77]">teal</span> Manali · dashed amber = planned routes · moving dot = convoy in transit</div>
           </div>
         </div>
 
@@ -227,6 +236,45 @@ export default function CommandView() {
               </div>
               <div className="mt-2 text-[10px] leading-relaxed text-[#777B68]">
                 Naive: nearest-depot resupply, 3-day fixed lead, no forecast/rerouting. DRONA: LightGBM + MILP, 1-day lead, corridor-aware. Includes Zoji La closure days {metrics.scenario.closure.from_day}–{metrics.scenario.closure.to_day}. All figures computed from the simulation.
+              </div>
+            </section>
+          )}
+
+          {/* forecast accuracy (walk-forward backtest) */}
+          {accuracy?.per_class && (
+            <section className="border-b border-[#1b2735] p-3">
+              <div className="mb-2 flex items-baseline justify-between">
+                <div className="text-[11px] uppercase tracking-widest text-slate-400">Forecast accuracy</div>
+                <span className="text-[9px] text-amber-500">walk-forward · {accuracy.splits}×{accuracy.test_days_per_split}d</span>
+              </div>
+              <table className="w-full text-[11px]">
+                <thead className="text-slate-500">
+                  <tr>
+                    <th className="text-left font-normal">Class</th>
+                    <th className="text-right font-normal">MAE</th>
+                    <th className="text-right font-normal">vs 7-day mean</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['I', 'III', 'V'].map((c) => {
+                    const v = accuracy.per_class[c]
+                    if (!v) return null
+                    const better = v.improvement_pct > 0
+                    return (
+                      <tr key={c} className="border-t border-[#141d28]">
+                        <td className="py-1 text-slate-300">{CLASS_META[c].name}</td>
+                        <td className="text-right text-slate-300">{fmtNum(v.mae, 2)}</td>
+                        <td className={`text-right ${better ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {better ? '−' : '+'}{fmtNum(Math.abs(v.improvement_pct), 1)}%
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div className="mt-1.5 text-[10px] leading-relaxed text-slate-500">
+                Pooled MAE over {accuracy.splits} walk-forward folds of {accuracy.test_days_per_split} days each
+                (train strictly before test). Baseline = rolling trailing 7-day mean, updated with each observed day. All figures SIMULATED.
               </div>
             </section>
           )}
